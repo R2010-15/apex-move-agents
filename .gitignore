@@ -1,0 +1,14 @@
+# Secrete — NU se urcă pe GitHub
+.env
+telegram_bot/.env
+
+# Loguri generate local
+telegram_bot/bot_log.txt
+telegram_bot/setup_log.txt
+push_log.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
