@@ -1,0 +1,22 @@
+{
+  // Config pentru auto-deploy din GitHub (Cloudflare Workers Builds).
+  // Cand conectam Worker-ul la repo, Cloudflare foloseste acest fisier.
+  "name": "twilight-mouse-dbc5",
+  "main": "cloudflare_worker/apex_worker.js",
+  "compatibility_date": "2026-06-14",
+
+  // Imagini (Workers AI)
+  "ai": { "binding": "AI" },
+
+  // Memorie (KV) — INLOCUIESTE id-ul cu ID-ul real al namespace-ului "apex-memory"
+  // (il gasesti in Cloudflare -> Storage & Databases -> KV -> apex-memory)
+  "kv_namespaces": [
+    { "binding": "APEX_KV", "id": "021cb7f43b0547fa07c61ba5ac830df" }
+  ],
+
+  // Treaba zilnica automata: 04:00 UTC = 07:00 in Moldova
+  "triggers": { "crons": ["0 4 * * *"] }
+
+  // Notă: TELEGRAM_TOKEN si GROQ_API_KEY NU se pun aici (sunt secrete).
+  // Se seteaza in Cloudflare ca "Secret" si raman peste deploy-uri.
+}
