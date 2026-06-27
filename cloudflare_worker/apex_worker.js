@@ -1,4 +1,4 @@
-// 🟠 APEX MOVE — Bot Telegram pe Cloudflare Workers (v4)
+// 🟠 APEX MOVE — Bot Telegram pe Cloudflare Workers (v4.1)
 // Groq (text) + Workers AI (imagini) + KV (memorie + setari) + Cron (treaba zilnica).
 // 12 agenti, comenzi multiple, setari, grup comun, postare automata zilnica.
 //
@@ -31,7 +31,6 @@ const AGENTS = {
     prompt: "Esti EDITORUL VIDEO (CapCut). " + BRAND + " Montaj pas-cu-pas cu timpi: import, taieturi, text pe ecran, tranzitii, muzica pe beat, Auto Captions, export 1080x1920 30fps. Structura: 0-2s hook, 2-5s promisiune, 5-15s taieturi rapide, 15-20s CTA." },
   strateg: { emoji: "\u{1F50E}", label: "Analist Concurenta",
     prompt: "Esti ANALISTUL de concurenta & strategie. " + BRAND + " Analizezi concurenta pe TikTok/Instagram, identifici tipare virale si golul Apex Move. Format: Analiza concurenta / Tipare in nisa / Golul Apex Move / Strategie 30 zile." + KNOWLEDGE },
-  // --- agenti noi de business ---
   vanzari: { emoji: "\u{1F4B0}", label: "Vanzari",
     prompt: "Esti AGENTUL DE VANZARI. " + BRAND + " Te ocupi de conversie: mesaje de DM care vand, raspunsuri la obiectii ('e scump', 'ma mai gandesc'), oferte si pachete, follow-up, urgenta/scarcity etica. Dai scripturi gata de folosit." },
   copywriter: { emoji: "\u{270D}\u{FE0F}", label: "Copywriter",
@@ -230,32 +229,46 @@ async function handleUpdate(update, env) {
 // ----------------- Cron zilnic -----------------
 async function buildDailyReport(env) {
   const extra = await getBrandExtra(env);
-  // Fiecare agent cheie livreaza ceva concret
+
+  // IMPORTANT: fiecare prompt interzice explicit cifrele inventate
+  const NO_NUMBERS = " REGULA STRICTA: NU inventa statistici, cifre, procente sau date pe care nu le cunosti (followeri, vanzari, views, etc.). Daca nu ai date reale, nu le mentiona. Concentreaza-te DOAR pe sarcini practice si actiuni concrete de facut azi.";
+
   const tasks = [
-    ["manager", "Planul de azi pe scurt: TOP 3 prioritati."],
-    ["continut", "3 idei de continut pentru AZI, fiecare cu Hook si CTA."],
-    ["strateg", "O idee rapida bazata pe ce viralizeaza acum in nisa."],
-    ["vanzari", "O actiune de vanzari de facut azi: 1 mesaj/oferta gata de folosit."],
-    ["finante", "O recomandare scurta de bani pentru azi."],
+    ["manager",   "Planul de azi pe scurt: TOP 3 prioritati concrete de facut AZI pentru Apex Move. Fii specific si practic." + NO_NUMBERS],
+    ["continut",  "3 idei de continut pentru AZI, fiecare cu: Tip / Hook / Ce filmezi / CTA. Idei filmabile cu telefonul." + NO_NUMBERS],
+    ["strateg",   "O observatie despre ce viralizeaza acum in nisa sportwear/fitness si cum poate Apex Move sa profite. Fara cifre inventate." + NO_NUMBERS],
+    ["vanzari",   "O actiune de vanzari concreta pentru AZI: scrie un mesaj de DM sau o oferta gata de trimis/postat." + NO_NUMBERS],
+    ["finante",   "Un sfat practic de business pentru azi legat de costuri, preturi sau reinvestire. Fara cifre inventate." + NO_NUMBERS],
   ];
-  let report = "☀️ Raportul zilei — agentii au lucrat:\n";
+
+  let report = "☀️ Buna dimineata, Robert! Planul zilei — Apex Move\n";
+  report += "━━━━━━━━━━━━━━━━━━━━━━\n";
+
   for (const t of tasks) {
     try {
       const a = AGENTS[t[0]];
       const ans = await callGroq(env, sysPrompt(t[0], extra), [], t[1]);
-      report += "\n" + a.emoji + " " + a.label + "\n" + ans + "\n";
+      report += "\n" + a.emoji + " " + a.label.toUpperCase() + "\n" + ans + "\n";
+      report += "──────────────────────\n";
     } catch (e) {}
   }
+
+  report += "\n💪 Fii consistent. Apex Move creste zi cu zi!";
+
   let img = null;
-  try { img = await generateImageBytes(env, "Sport fashion daily motivational poster, black and orange, dynamic athlete"); } catch (e) {}
+  try { img = await generateImageBytes(env, "Sport fashion daily motivational poster, black and orange, dynamic athlete, bold typography, Apex Move"); } catch (e) {}
   return { report: report, img: img };
 }
+
 async function runDaily(env) {
   const chats = await getDailyChats(env);
   if (!chats.length) return;
   const r = await buildDailyReport(env);
   for (const cid of chats) {
-    try { await sendMessage(env, cid, "☀️ Buna dimineata!\n" + r.report); if (r.img) await sendPhoto(env, cid, r.img, "\u{1F3A8} Posterul zilei"); } catch (e) {}
+    try {
+      await sendMessage(env, cid, r.report);
+      if (r.img) await sendPhoto(env, cid, r.img, "\u{1F3A8} Posterul zilei — Apex Move");
+    } catch (e) {}
   }
 }
 
