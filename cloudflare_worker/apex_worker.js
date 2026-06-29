@@ -1,8 +1,9 @@
-// 🟠 APEX MOVE — Bot Telegram pe Cloudflare Workers (v4.1)
+// ð  APEX MOVE â Bot Telegram pe Cloudflare Workers (v4.2)
 // Groq (text) + Workers AI (imagini) + KV (memorie + setari) + Cron (treaba zilnica).
 // 12 agenti, comenzi multiple, setari, grup comun, postare automata zilnica.
 //
 // Variabile: TELEGRAM_TOKEN, GROQ_API_KEY, (optional) GROQ_MODEL
+//            GOOGLE_SHEETS_ID, GOOGLE_API_KEY (pentru date reale din Sheets)
 // Bindings:  AI (Workers AI), APEX_KV (KV)
 // Trigger:   Cron (ex: 0 4 * * *  = 07:00 in Moldova)
 
@@ -62,24 +63,25 @@ const QUICK = {
 
 function startText() {
   return (
-    "\u{1F7E0} APEX MOVE — Echipa de agenti AI (24/7)\n\n" +
+    "\u{1F7E0} APEX MOVE â Echipa de agenti AI (24/7)\n\n" +
     "Scrie-mi orice si raspunde agentul curent (implicit \u{1F451} Administrator). Imi amintesc conversatia.\n\n" +
     "\u{1F465} AGENTI (schimba cu comanda, ramane setat):\n" +
     "/manager /continut /design /video /capcut /strateg\n/vanzari /copywriter /reclame /produs /colaborari /finante\n\n" +
-    "⚡ RAPIDE: /idei /plan /analiza /hook /caption /oferta /azi\n\n" +
-    "\u{1F5BC}\u{FE0F} /imagine <descriere> — imagine grafica\n" +
-    "\u{1F451} /administrator — imaginea Administratorului\n" +
-    "☀\u{FE0F} AUTOMATIZARE ZILNICA (o controlezi tu):\n" +
-    "   /activeaza — PORNESTE raport automat zilnic aici\n" +
-    "   /stop — OPRESTE  |  /raport — ruleaza ACUM  |  /status — vezi starea\n" +
-    "⚙\u{FE0F} /setbrand <text> — adauga context despre afacerea ta\n" +
-    "ℹ\u{FE0F} /info — setari curente   |   /agenti — lista   |   \u{1F9F9} /reset\n\n" +
+    "â¡ RAPIDE: /idei /plan /analiza /hook /caption /oferta /azi\n\n" +
+    "\u{1F5BC}\u{FE0F} /imagine <descriere> â imagine grafica\n" +
+    "\u{1F451} /administrator â imaginea Administratorului\n" +
+    "â\u{FE0F} AUTOMATIZARE ZILNICA (o controlezi tu):\n" +
+    "   /activeaza â PORNESTE raport automat zilnic aici\n" +
+    "   /stop â OPRESTE  |  /raport â ruleaza ACUM  |  /status â vezi starea\n" +
+    "â\u{FE0F} /setbrand <text> â adauga context despre afacerea ta\n" +
+    "ð /setdate <date> â introdu datele reale zilnice (vanzari, cheltuieli)\n" +
+    "â¹\u{FE0F} /info â setari curente   |   /agenti â lista   |   \u{1F9F9} /reset\n\n" +
     "Merg si in GRUP: adauga-ma intr-un grup si folositi comenzile impreuna."
   );
 }
 function agentiText() {
   let s = "\u{1F465} Echipa Apex Move (" + Object.keys(AGENTS).length + " agenti):\n\n";
-  for (const k in AGENTS) s += AGENTS[k].emoji + " /" + k + " — " + AGENTS[k].label + "\n";
+  for (const k in AGENTS) s += AGENTS[k].emoji + " /" + k + " â " + AGENTS[k].label + "\n";
   return s;
 }
 
@@ -97,6 +99,20 @@ function sysPrompt(agentKey, extra) {
   return AGENTS[agentKey].prompt + (extra ? (" CONTEXT SUPLIMENTAR DESPRE AFACERE (de la Robert): " + extra) : "");
 }
 
+// System prompt special pentru raportul zilnic â FARA CIFRE INVENTATE
+function reportSysPrompt(agentKey, extra, sheetsData) {
+  const STRICT =
+    "ð« REGULA ABSOLUTA PENTRU ACEST RAPORT: NU scrie NICIUN numar, suma in lei, procent, " +
+    "cifra de vanzari, numar de followeri, vizualizari, buget sau statistica pe care nu o ai de la Robert. " +
+    "Daca nu ai date reale furnizate explicit mai jos, NU le inventa, NU le estima, NU da exemple cu numere. " +
+    "Raspunde EXCLUSIV cu actiuni practice, pasi concisi, sfaturi de executie. " +
+    "Orice cifra inventata este o eroare grava. ";
+  let context = "";
+  if (sheetsData) context += " DATE REALE DIN GOOGLE SHEETS (foloseste-le): " + sheetsData;
+  if (extra) context += " CONTEXT AFACERE DE LA ROBERT: " + extra;
+  return STRICT + AGENTS[agentKey].prompt + context;
+}
+
 // ----------------- Groq -----------------
 async function callGroq(env, systemPrompt, history, userText) {
   const model = (env.GROQ_MODEL || "llama-3.3-70b-versatile").trim();
@@ -105,7 +121,7 @@ async function callGroq(env, systemPrompt, history, userText) {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + env.GROQ_API_KEY },
     body: JSON.stringify({ model: model, max_tokens: 1500, temperature: 0.8, messages: messages }),
   });
-  if (!r.ok) return "⚠️ Eroare Groq (" + r.status + "). Incearca din nou.";
+  if (!r.ok) return "â ï¸ Eroare Groq (" + r.status + "). Incearca din nou.";
   const data = await r.json();
   return (data.choices && data.choices[0] && data.choices[0].message.content) || "(raspuns gol)";
 }
@@ -143,8 +159,8 @@ async function doImage(env, chatId, desc, caption) {
   await sendChatAction(env, chatId, "upload_photo");
   try {
     const bytes = await generateImageBytes(env, "Sport fashion brand poster, Apex Move, energetic, bold, high contrast, black and orange accents, dynamic. " + desc);
-    await sendPhoto(env, chatId, bytes, caption || ("\u{1F3A8} Apex Move — " + desc));
-  } catch (e) { await sendMessage(env, chatId, "⚠️ Nu am putut genera imaginea acum. Mai incearca."); }
+    await sendPhoto(env, chatId, bytes, caption || ("\u{1F3A8} Apex Move â " + desc));
+  } catch (e) { await sendMessage(env, chatId, "â ï¸ Nu am putut genera imaginea acum. Mai incearca."); }
 }
 
 // ----------------- Handler -----------------
@@ -160,7 +176,7 @@ async function handleUpdate(update, env) {
   if (firstWord === "/start" || firstWord === "/help") { await sendMessage(env, chatId, startText()); return; }
   if (firstWord === "/agenti") { await sendMessage(env, chatId, agentiText()); return; }
   if (firstWord === "/reset") { await saveState(env, chatId, { agent: "admin", history: [] }); await sendMessage(env, chatId, "\u{1F9F9} Am uitat conversatia. O luam de la zero."); return; }
-  if (firstWord === "/activeaza") { await addDailyChat(env, chatId); await sendMessage(env, chatId, "☀️ Gata! Primesti AUTOMAT continut Apex Move aici in fiecare dimineata (idei + poster). /stop opreste."); return; }
+  if (firstWord === "/activeaza") { await addDailyChat(env, chatId); await sendMessage(env, chatId, "âï¸ Gata! Primesti AUTOMAT continut Apex Move aici in fiecare dimineata (idei + poster). /stop opreste."); return; }
   if (firstWord === "/stop") { await removeDailyChat(env, chatId); await sendMessage(env, chatId, "\u{1F6D1} Am oprit continutul zilnic automat aici."); return; }
   if (firstWord === "/raport") {
     await sendChatAction(env, chatId, "typing");
@@ -177,26 +193,40 @@ async function handleUpdate(update, env) {
   }
   if (firstWord === "/setbrand") {
     const v = text.replace(/^\/setbrand(@\S+)?/i, "").trim();
-    if (!v) { const cur = await getBrandExtra(env); await sendMessage(env, chatId, cur ? ("Context actual:\n" + cur) : "Scrie dupa comanda detalii despre afacerea ta, ex: /setbrand vand tricouri si hanorace, pret 250-450 lei, vand pe Instagram si TikTok."); return; }
-    await kvPut(env, "brand_extra", v); await sendMessage(env, chatId, "⚙️ Am salvat contextul. Toti agentii il vor folosi de acum.");
+    if (!v) { const cur = await getBrandExtra(env); await sendMessage(env, chatId, cur ? ("Context actual:\n" + cur) : "Scrie dupa comanda detalii despre afacerea ta, ex: /setbrand vand tricouri si hanorace, vand pe Instagram si TikTok."); return; }
+    await kvPut(env, "brand_extra", v); await sendMessage(env, chatId, "âï¸ Am salvat contextul. Toti agentii il vor folosi de acum.");
+    return;
+  }
+  // /setdate â Robert introduce datele zilnice reale (vanzari, cheltuieli etc.)
+  if (firstWord === "/setdate") {
+    const v = text.replace(/^\/setdate(@\S+)?/i, "").trim();
+    if (!v) {
+      const cur = await kvGet(env, "daily_data");
+      await sendMessage(env, chatId,
+        cur ? ("ð Date zilnice curente:\n" + cur + "\n\nActualizeaza cu: /setdate vanzari: X lei, cheltuieli: Y lei, comenzi: Z, alte info") :
+        "ð Introduce datele reale de azi:\n/setdate vanzari: 500 lei, cheltuieli: 200 lei, comenzi: 3, marketing: Instagram DM\n\nAceste date vor fi folosite in raport in loc de cifre inventate.");
+      return;
+    }
+    await kvPut(env, "daily_data", v, 86400); // expira dupa 24h
+    await sendMessage(env, chatId, "ð Date zilnice salvate! Raportul de maine le va folosi.\n\nDate: " + v);
     return;
   }
   if (firstWord === "/info") {
     const extra = await getBrandExtra(env); const dc = await getDailyChats(env); const st = await getState(env, chatId);
-    await sendMessage(env, chatId, "ℹ️ Setari Apex Move\n\nAgent curent: " + (AGENTS[st.agent] ? AGENTS[st.agent].label : "Administrator") + "\nContext afacere: " + (extra ? extra : "(neсetat)") + "\nChat-uri cu continut zilnic: " + dc.length);
+    await sendMessage(env, chatId, "â¹ï¸ Setari Apex Move\n\nAgent curent: " + (AGENTS[st.agent] ? AGENTS[st.agent].label : "Administrator") + "\nContext afacere: " + (extra ? extra : "(neÑetat)") + "\nChat-uri cu continut zilnic: " + dc.length);
     return;
   }
-  if (firstWord === "/administrator") { await doImage(env, chatId, "confident young male sports brand manager, athletic, modern streetwear, orange and black, studio portrait, leadership", "\u{1F451} Administrator — Apex Move"); return; }
+  if (firstWord === "/administrator") { await doImage(env, chatId, "confident young male sports brand manager, athletic, modern streetwear, orange and black, studio portrait, leadership", "\u{1F451} Administrator â Apex Move"); return; }
   if (firstWord === "/imagine" || firstWord === "/poster") {
     const p = text.replace(/^\/(imagine|poster)(@\S+)?/i, "").trim();
-    if (!p) { await sendMessage(env, chatId, "\u{1F5BC}️ Scrie ce vrei, ex: /imagine poster Apex Move, negru cu portocaliu, alergator in miscare"); return; }
+    if (!p) { await sendMessage(env, chatId, "\u{1F5BC}ï¸ Scrie ce vrei, ex: /imagine poster Apex Move, negru cu portocaliu, alergator in miscare"); return; }
     await doImage(env, chatId, p, null); return;
   }
   if (firstWord === "/azi") {
     const extra = await getBrandExtra(env);
     await sendChatAction(env, chatId, "typing");
     const ideas = await callGroq(env, sysPrompt("continut", extra), [], "Da-mi 5 idei de continut pentru AZI, scurte, fiecare cu Tip, Hook si CTA.");
-    await sendMessage(env, chatId, "☀️ Continutul zilei — Apex Move\n\n" + ideas);
+    await sendMessage(env, chatId, "âï¸ Continutul zilei â Apex Move\n\n" + ideas);
     await doImage(env, chatId, "poster motivational sportiv pentru azi", "\u{1F3A8} Posterul zilei");
     return;
   }
@@ -226,34 +256,76 @@ async function handleUpdate(update, env) {
   await sendMessage(env, chatId, agent.emoji + " " + agent.label + "\n\n" + answer);
 }
 
+// ----------------- Google Sheets -----------------
+async function fetchSheetData(env) {
+  try {
+    if (!env.GOOGLE_SHEETS_ID || !env.GOOGLE_API_KEY) return null;
+    // Citeste ultimele 14 randuri din Sheet1 (coloane A-F)
+    const url = "https://sheets.googleapis.com/v4/spreadsheets/" + env.GOOGLE_SHEETS_ID +
+      "/values/Sheet1!A:F?key=" + env.GOOGLE_API_KEY + "&majorDimension=ROWS";
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const data = await r.json();
+    const rows = data.values || [];
+    if (rows.length < 2) return null;
+    const headers = rows[0];
+    // Ultimele 14 randuri de date (sau mai putine daca nu sunt)
+    const recent = rows.slice(Math.max(1, rows.length - 14));
+    let out = "Coloane: " + headers.join(" | ") + "\n";
+    for (const row of recent) {
+      out += row.join(" | ") + "\n";
+    }
+    return out.trim();
+  } catch (e) { return null; }
+}
+
 // ----------------- Cron zilnic -----------------
 async function buildDailyReport(env) {
   const extra = await getBrandExtra(env);
+  const sheetsData = await fetchSheetData(env);
+  // Date introduse manual de Robert cu /setdate (au prioritate daca nu e Sheets)
+  const manualData = await kvGet(env, "daily_data");
+  const realData = sheetsData || manualData || null;
 
-  // IMPORTANT: fiecare prompt interzice explicit cifrele inventate
-  const NO_NUMBERS = " REGULA STRICTA: NU inventa statistici, cifre, procente sau date pe care nu le cunosti (followeri, vanzari, views, etc.). Daca nu ai date reale, nu le mentiona. Concentreaza-te DOAR pe sarcini practice si actiuni concrete de facut azi.";
-
+  // Tasklist pentru raport zilnic â fara cifre inventate
   const tasks = [
-    ["manager",   "Planul de azi pe scurt: TOP 3 prioritati concrete de facut AZI pentru Apex Move. Fii specific si practic." + NO_NUMBERS],
-    ["continut",  "3 idei de continut pentru AZI, fiecare cu: Tip / Hook / Ce filmezi / CTA. Idei filmabile cu telefonul." + NO_NUMBERS],
-    ["strateg",   "O observatie despre ce viralizeaza acum in nisa sportwear/fitness si cum poate Apex Move sa profite. Fara cifre inventate." + NO_NUMBERS],
-    ["vanzari",   "O actiune de vanzari concreta pentru AZI: scrie un mesaj de DM sau o oferta gata de trimis/postat." + NO_NUMBERS],
-    ["finante",   "Un sfat practic de business pentru azi legat de costuri, preturi sau reinvestire. Fara cifre inventate." + NO_NUMBERS],
+    ["manager",
+      "TOP 3 actiuni concrete de facut AZI pentru Apex Move. Fiecare actiune: ce faci exact, cand, cum. " +
+      "NU da timpi estimati, bugete sau cifre daca nu le ai din datele furnizate. Fii direct si practic."],
+    ["continut",
+      "3 idei de continut pentru AZI, fiecare cu: Tip / Hook (prima propozitie) / Ce filmezi / CTA. " +
+      "Idei filmabile cu telefonul, fara a mentiona cifre de performanta."],
+    ["strateg",
+      "O tendinta concreta care viralizeaza acum in sportwear/fitness si un mod specific in care Apex Move o poate folosi maine. " +
+      "Fara statistici, fara procente. Doar observatie + actiune."],
+    ["vanzari",
+      "Scrie un mesaj de DM gata de copiat si trimis azi pentru a vinde un produs Apex Move. " +
+      "Daca nu stii pretul exact, pune [PRET] ca placeholder. NU inventa alte cifre."],
+    ["finante",
+      "Un sfat practic de business pentru azi: o decizie legata de costuri, pret sau reinvestire. " +
+      "Fara sume inventate. Daca ai date reale din Sheets, foloseste-le. Altfel â sfat conceptual clar."],
   ];
 
-  let report = "☀️ Buna dimineata, Robert! Planul zilei — Apex Move\n";
-  report += "━━━━━━━━━━━━━━━━━━━━━━\n";
+  let report = "âï¸ Buna dimineata, Robert! Planul zilei â Apex Move\n";
+  if (sheetsData) report += "ð Date din Google Sheets â\n";
+  else if (manualData) report += "ð Date introduse manual â\n";
+  else report += "ð¡ Tip: foloseste /setdate pentru a adauga date reale\n";
+  report += "ââââââââââââââââââââââ\n";
 
   for (const t of tasks) {
     try {
       const a = AGENTS[t[0]];
-      const ans = await callGroq(env, sysPrompt(t[0], extra), [], t[1]);
+      const ans = await callGroq(env, reportSysPrompt(t[0], extra, realData), [], t[1]);
       report += "\n" + a.emoji + " " + a.label.toUpperCase() + "\n" + ans + "\n";
-      report += "──────────────────────\n";
+      report += "ââââââââââââââââââââââ\n";
     } catch (e) {}
   }
 
-  report += "\n💪 Fii consistent. Apex Move creste zi cu zi!";
+  if (realData) {
+    report += "\nð DATE REALE FOLOSITE\n" + realData.slice(0, 400) + "\n";
+  }
+
+  report += "\nðª Fii consistent. Apex Move creste zi cu zi!";
 
   let img = null;
   try { img = await generateImageBytes(env, "Sport fashion daily motivational poster, black and orange, dynamic athlete, bold typography, Apex Move"); } catch (e) {}
@@ -267,7 +339,7 @@ async function runDaily(env) {
   for (const cid of chats) {
     try {
       await sendMessage(env, cid, r.report);
-      if (r.img) await sendPhoto(env, cid, r.img, "\u{1F3A8} Posterul zilei — Apex Move");
+      if (r.img) await sendPhoto(env, cid, r.img, "\u{1F3A8} Posterul zilei â Apex Move");
     } catch (e) {}
   }
 }
@@ -277,7 +349,7 @@ export default {
     if (request.method !== "POST") return new Response("Apex Move bot is alive \u{1F7E0}");
     let update; try { update = await request.json(); } catch (e) { return new Response("ok"); }
     try { await handleUpdate(update, env); }
-    catch (e) { try { const m = update && (update.message || update.edited_message); if (m && m.chat) await sendMessage(env, m.chat.id, "⚠️ A aparut o eroare, dar botul e ok. Mai incearca."); } catch (e2) {} }
+    catch (e) { try { const m = update && (update.message || update.edited_message); if (m && m.chat) await sendMessage(env, m.chat.id, "â ï¸ A aparut o eroare, dar botul e ok. Mai incearca."); } catch (e2) {} }
     return new Response("ok");
   },
   async scheduled(event, env, ctx) { ctx.waitUntil(runDaily(env)); },
